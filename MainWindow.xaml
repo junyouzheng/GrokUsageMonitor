@@ -1,0 +1,188 @@
+<Window x:Class="GrokUsageMonitor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:GrokUsageMonitor"
+        Title="Grok 用量监控"
+        Width="420" Height="720"
+        MinWidth="420" MaxWidth="420"
+        MinHeight="720" MaxHeight="720"
+        Background="{StaticResource BgBrush}"
+        Foreground="{StaticResource TextBrush}"
+        WindowStartupLocation="Manual"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI, Microsoft YaHei UI"
+        KeyDown="OnKeyDown"
+        Closing="OnClosing"
+        LocationChanged="OnLocationChanged"
+        Activated="OnActivated">
+  <WindowChrome.WindowChrome>
+    <WindowChrome CaptionHeight="0" GlassFrameThickness="0" ResizeBorderThickness="0" CornerRadius="0"/>
+  </WindowChrome.WindowChrome>
+
+  <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Background="{StaticResource BgBrush}">
+    <DockPanel>
+      <Border DockPanel.Dock="Top" Height="44" Background="{StaticResource BgBrush}">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0">
+          <Ellipse Width="8" Height="8" Fill="{Binding StatusBrush}" Margin="0,0,8,0"/>
+          <TextBlock Text="GROK 用量" FontSize="12" FontWeight="SemiBold"
+                     Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+          <TextBlock Text="{Binding LiveLabel}" Margin="10,0,0,0" FontSize="11"
+                     Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center"/>
+        </StackPanel>
+      </Border>
+
+      <Border DockPanel.Dock="Top" Background="#3A1E1E" Padding="12,8"
+              Visibility="{Binding ErrorVisibility}">
+        <TextBlock Text="{Binding ErrorText}" Foreground="#FFB4B4" TextWrapping="Wrap" FontSize="12"/>
+      </Border>
+
+      <Border DockPanel.Dock="Bottom" Padding="14,10" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="{Binding FooterText}" Foreground="{StaticResource MutedBrush}" FontSize="12"/>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+              <TextBlock Text="自动刷新" Foreground="#C8CDD6" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+              <Button x:Name="IntervalButton" Width="108" Click="OpenIntervalMenu"
+                      Cursor="Hand" FontSize="13" Foreground="#F3EEE4">
+                <Button.Template>
+                  <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" Background="#1C1F26" BorderBrush="#E2B66A"
+                            BorderThickness="1" CornerRadius="8" Padding="10,7">
+                      <DockPanel>
+                        <Path DockPanel.Dock="Right" Data="M0,0 L5,5 L10,0"
+                              Stroke="#E2B66A" StrokeThickness="1.6"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              VerticalAlignment="Center" Margin="8,1,0,0"/>
+                        <ContentPresenter VerticalAlignment="Center"/>
+                      </DockPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="bd" Property="Background" Value="#262A33"/>
+                      </Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </Button.Template>
+              </Button>
+              <Popup x:Name="IntervalPopup" PlacementTarget="{Binding ElementName=IntervalButton}"
+                     Placement="Top" StaysOpen="False" AllowsTransparency="True"
+                     VerticalOffset="-6">
+                <Border Background="#14161B" BorderBrush="#E2B66A" BorderThickness="1"
+                        CornerRadius="10" Padding="6" Width="148">
+                  <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.5" Color="#000000"/>
+                  </Border.Effect>
+                  <StackPanel>
+                    <Button Style="{StaticResource IntervalMenuItem}" Content="10 分钟" Tag="600" Click="PickInterval"/>
+                    <Button Style="{StaticResource IntervalMenuItem}" Content="30 分钟" Tag="1800" Click="PickInterval"/>
+                  </StackPanel>
+                </Border>
+              </Popup>
+            </StackPanel>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+            <Button Style="{StaticResource GoldButton}" Content="刷新" Click="OnRefreshClick" Margin="0,0,8,0"
+                    ToolTip="立即刷新额度（F5）"/>
+            <Button x:Name="StartupButton" Style="{StaticResource PrimaryButton}" Content="开机启动" Click="ToggleStartup"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,8,16,12">
+        <StackPanel>
+          <Grid Margin="0,4,0,10">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="{Binding AccountLine}" FontSize="13"/>
+              <TextBlock Text="{Binding Email}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,2,0,0"/>
+            </StackPanel>
+            <Border Grid.Column="1" Background="#242018" CornerRadius="8" Padding="10,4" VerticalAlignment="Center">
+              <TextBlock Text="{Binding Tier}" Foreground="{StaticResource GoldBrush}" FontSize="11" FontWeight="SemiBold"/>
+            </Border>
+          </Grid>
+
+          <Grid Margin="0,6,0,4">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid Width="168" Height="168">
+              <local:RingGauge Value="{Binding UsedPercent}" Thickness="14"
+                               TrackBrush="#2A2E36" FillBrush="{Binding RingBrush}"/>
+              <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="{Binding RemainingText}" FontSize="36" FontWeight="Light"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="剩余" Foreground="{StaticResource MutedBrush}" FontSize="12"
+                           HorizontalAlignment="Center" Margin="0,2,0,0"/>
+              </StackPanel>
+            </Grid>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="18,0,0,0">
+              <TextBlock Text="{Binding UsedLine}" FontSize="14"/>
+              <local:PercentBar Height="8" Margin="0,8,0,12" Value="{Binding UsedPercent}" Fill="{Binding RingBrush}"/>
+              <TextBlock Text="{Binding ResetLine}" Foreground="{StaticResource MutedBrush}" FontSize="12" TextWrapping="Wrap"/>
+              <TextBlock Text="{Binding PaceLine}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+              <TextBlock Text="{Binding RunoutLine}" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                         Margin="0,6,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+          </Grid>
+
+          <StackPanel>
+            <Border Style="{StaticResource Card}" Margin="0,8,0,0">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                  <TextBlock Text="本周期" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                  <TextBlock Text="{Binding PeriodType}" FontSize="16" Margin="0,4,0,0"/>
+                  <TextBlock Text="{Binding PeriodRange}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1">
+                  <TextBlock Text="额外预付额度" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                  <TextBlock Text="{Binding PrepaidText}" FontSize="16" Margin="0,4,0,0"/>
+                  <TextBlock Text="{Binding PoolHint}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+              </Grid>
+            </Border>
+
+            <TextBlock Text="产品拆分" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="2,16,0,8"/>
+            <ItemsControl ItemsSource="{Binding Products}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="88"/>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="48"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Label}" FontSize="12" VerticalAlignment="Center"/>
+                    <local:PercentBar Grid.Column="1" Height="8" Margin="8,0" Value="{Binding Percent}"/>
+                    <TextBlock Grid.Column="2" Text="{Binding Percent, StringFormat={}{0:0.#}%}"
+                               FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding EmptyProducts}" Foreground="{StaticResource MutedBrush}" FontSize="12"/>
+
+            <TextBlock Text="近 7 天用量走势" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="2,8,0,8"/>
+            <Border Style="{StaticResource Card}" Padding="10">
+              <local:Sparkline Height="64" Values="{Binding History}" Stroke="{StaticResource GoldBrush}"/>
+            </Border>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+  </Border>
+</Window>
