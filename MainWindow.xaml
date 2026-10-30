@@ -45,48 +45,8 @@
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="{Binding FooterText}" Foreground="{StaticResource MutedBrush}" FontSize="12"/>
-            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-              <TextBlock Text="自动刷新" Foreground="#C8CDD6" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
-              <Button x:Name="IntervalButton" Width="108" Click="OpenIntervalMenu"
-                      Cursor="Hand" FontSize="13" Foreground="#F3EEE4">
-                <Button.Template>
-                  <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd" Background="#1C1F26" BorderBrush="#E2B66A"
-                            BorderThickness="1" CornerRadius="8" Padding="10,7">
-                      <DockPanel>
-                        <Path DockPanel.Dock="Right" Data="M0,0 L5,5 L10,0"
-                              Stroke="#E2B66A" StrokeThickness="1.6"
-                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                              VerticalAlignment="Center" Margin="8,1,0,0"/>
-                        <ContentPresenter VerticalAlignment="Center"/>
-                      </DockPanel>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                      <Trigger Property="IsMouseOver" Value="True">
-                        <Setter TargetName="bd" Property="Background" Value="#262A33"/>
-                      </Trigger>
-                    </ControlTemplate.Triggers>
-                  </ControlTemplate>
-                </Button.Template>
-              </Button>
-              <Popup x:Name="IntervalPopup" PlacementTarget="{Binding ElementName=IntervalButton}"
-                     Placement="Top" StaysOpen="False" AllowsTransparency="True"
-                     VerticalOffset="-6">
-                <Border Background="#14161B" BorderBrush="#E2B66A" BorderThickness="1"
-                        CornerRadius="10" Padding="6" Width="148">
-                  <Border.Effect>
-                    <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.5" Color="#000000"/>
-                  </Border.Effect>
-                  <StackPanel>
-                    <Button Style="{StaticResource IntervalMenuItem}" Content="10 分钟" Tag="600" Click="PickInterval"/>
-                    <Button Style="{StaticResource IntervalMenuItem}" Content="30 分钟" Tag="1800" Click="PickInterval"/>
-                  </StackPanel>
-                </Border>
-              </Popup>
-            </StackPanel>
-          </StackPanel>
+          <TextBlock Text="{Binding FooterText}" Foreground="{StaticResource MutedBrush}" FontSize="12"
+                     VerticalAlignment="Center"/>
           <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
             <Button Style="{StaticResource GoldButton}" Content="刷新" Click="OnRefreshClick" Margin="0,0,8,0"
                     ToolTip="立即刷新额度（F5）"/>

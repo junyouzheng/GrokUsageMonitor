@@ -73,32 +73,6 @@
       <Setter Property="Padding" Value="14"/>
     </Style>
 
-    <Style x:Key="IntervalMenuItem" TargetType="Button">
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="Foreground" Value="#F3EEE4"/>
-      <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FontSize" Value="14"/>
-      <Setter Property="HorizontalContentAlignment" Value="Left"/>
-      <Setter Property="Padding" Value="14,9"/>
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="Button">
-            <Border x:Name="bd" Background="{TemplateBinding Background}"
-                    CornerRadius="6" Padding="{TemplateBinding Padding}" Margin="2,1">
-              <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
-            </Border>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="bd" Property="Background" Value="#2E333D"/>
-                <Setter Property="Foreground" Value="#F3EEE4"/>
-              </Trigger>
-            </ControlTemplate.Triggers>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-    </Style>
-
     <Style x:Key="GoldButton" TargetType="Button">
       <Setter Property="Background" Value="#3A3018"/>
       <Setter Property="Foreground" Value="#F3EEE4"/>

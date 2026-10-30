@@ -167,7 +167,6 @@ internal sealed class CentValue
 
 public sealed class MonitorSettings
 {
-    public int IntervalSeconds { get; set; } = 1800;
     public bool AlwaysOnTop { get; set; }
     public bool CompactMode { get; set; }
     public bool StartWithWindows { get; set; }

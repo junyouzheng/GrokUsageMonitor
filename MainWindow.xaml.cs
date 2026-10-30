@@ -17,7 +17,6 @@ namespace GrokUsageMonitor;
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private readonly DispatcherTimer _pollTimer = new();
     private readonly MonitorSettings _settings;
     private readonly TrayService _tray;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -39,12 +38,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Topmost = false;
         ShowInTaskbar = false;
 
-        NormalizeInterval();
-        SelectInterval(_settings.IntervalSeconds);
         _clockTimer.Tick += (_, _) => RefreshClock();
         _clockTimer.Start();
-        _pollTimer.Tick += async (_, _) => await RefreshAsync(false);
-        RestartPollTimer();
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
@@ -75,7 +70,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public string LiveLabel => _fetching ? "刷新中" : "自动";
+    public string LiveLabel => _fetching ? "刷新中" : "手动";
     public Brush StatusBrush => _snap?.StatusBrush ?? BrushOf("#8B909A");
     public Brush RingBrush => UsedPercent >= 90 ? BrushOf("#E85D5D")
         : UsedPercent >= 75 ? BrushOf("#E8B44C")
@@ -107,7 +102,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ? "上次刷新失败"
         : _snap is null
             ? "尚未刷新"
-            : $"更新于 {_snap.FetchedAt:HH:mm:ss}  ·  每 {FormatInterval(_settings.IntervalSeconds)} 自动刷新";
+            : $"更新于 {_snap.FetchedAt:HH:mm:ss}  ·  点刷新或按 F5";
     public string ErrorText => _snap?.Error ?? "";
     public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorText) ? Visibility.Collapsed : Visibility.Visible;
 
@@ -125,7 +120,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             ApplySnapshot(snap);
             HistoryStore.Append(snap);
             MaybeNotify(snap);
-            RestartPollTimer();
         }
         catch (OperationCanceledException)
         {
@@ -203,69 +197,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Raise(nameof(ResetLine), nameof(PaceLine), nameof(RunoutLine), nameof(FooterText));
         if (_snap.Error is null)
             _tray.SetPercent(_snap.UsedPercent, extra: $"{_snap.Tier} · {UsageSnapshot.FormatRemaining(_snap.RemainingTime)}");
-    }
-
-    private static readonly int[] AllowedIntervals = [600, 1800];
-
-    private void NormalizeInterval()
-    {
-        if (!AllowedIntervals.Contains(_settings.IntervalSeconds))
-            _settings.IntervalSeconds = 1800;
-    }
-
-    private static string FormatInterval(int seconds) => seconds switch
-    {
-        600 => "10 分钟",
-        1800 => "30 分钟",
-        _ => "30 分钟"
-    };
-
-    private void RestartPollTimer()
-    {
-        _pollTimer.Stop();
-        _pollTimer.Interval = TimeSpan.FromSeconds(_settings.IntervalSeconds);
-        _pollTimer.Start();
-    }
-
-    private void SelectInterval(int seconds)
-    {
-        IntervalButton.Content = FormatInterval(seconds);
-        HighlightIntervalButtons(seconds);
-    }
-
-    private void OpenIntervalMenu(object sender, RoutedEventArgs e)
-    {
-        HighlightIntervalButtons(_settings.IntervalSeconds);
-        IntervalPopup.IsOpen = true;
-    }
-
-    private void PickInterval(object sender, RoutedEventArgs e)
-    {
-        if (sender is not System.Windows.Controls.Button btn) return;
-        if (!int.TryParse(btn.Tag?.ToString(), out var seconds)) return;
-        IntervalPopup.IsOpen = false;
-        _settings.IntervalSeconds = seconds;
-        AppSettings.Save(_settings);
-        SelectInterval(seconds);
-        RestartPollTimer();
-        Raise(nameof(FooterText));
-    }
-
-    private void HighlightIntervalButtons(int seconds)
-    {
-        if (IntervalPopup.Child is not Border border) return;
-        if (border.Child is not StackPanel panel) return;
-        foreach (var child in panel.Children)
-        {
-            if (child is not System.Windows.Controls.Button btn) continue;
-            var selected = btn.Tag?.ToString() == seconds.ToString();
-            btn.Background = selected
-                ? new SolidColorBrush(Color.FromRgb(0x3A, 0x30, 0x18))
-                : System.Windows.Media.Brushes.Transparent;
-            btn.Foreground = selected
-                ? new SolidColorBrush(Color.FromRgb(0xE2, 0xB6, 0x6A))
-                : new SolidColorBrush(Color.FromRgb(0xF3, 0xEE, 0xE4));
-        }
     }
 
     private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync(true);
@@ -348,7 +279,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _cts.Cancel();
         _clockTimer.Stop();
-        _pollTimer.Stop();
         _tray.Dispose();
         System.Windows.Application.Current.Shutdown();
     }
