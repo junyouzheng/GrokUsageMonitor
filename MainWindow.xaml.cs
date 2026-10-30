@@ -21,6 +21,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _exitRequested;
     private bool _fetching;
     private bool _snapping;
+    private string? _refreshError;
 
     public MainWindow()
     {
@@ -29,6 +30,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         DataContext = this;
 
         _tray = new TrayService(ToggleWindow, ExitApp, ToggleStartup, () => _settings.StartWithWindows);
+        if (SnapshotStore.Load() is { } cached)
+            ApplySnapshot(cached);
+        else
+        {
+            History = HistoryStore.LoadPoints(TimeSpan.FromDays(7)).ToList();
+            Raise(nameof(History));
+        }
 
         Topmost = false;
         ShowInTaskbar = false;
@@ -86,15 +94,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         : "订阅周额度";
     public ObservableCollection<ProductShare> Products { get; } = new();
     public string EmptyProducts => Products.Count == 0 ? "暂无产品拆分" : "";
-    public IList<double> History { get; private set; } = Array.Empty<double>();
+    public IReadOnlyList<HistoryPoint> History { get; private set; } = Array.Empty<HistoryPoint>();
     public string FooterText => _fetching
         ? "刷新中"
         : _snap?.Error is not null
             ? "刷新失败"
             : _snap is null
                 ? "尚未刷新"
-                : $"更新于 {_snap.FetchedAt:HH:mm:ss}";
-    public string ErrorText => _snap?.Error ?? "";
+                : $"更新于 {FormatFetched(_snap.FetchedAt)}";
+    public string ErrorText => _refreshError ?? _snap?.Error ?? "";
     public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorText) ? Visibility.Collapsed : Visibility.Visible;
 
     private async Task RefreshAsync()
@@ -105,8 +113,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         try
         {
             var snap = await Task.Run(() => BillingClient.FetchAsync(_cts.Token));
+            _refreshError = null;
             ApplySnapshot(snap);
             HistoryStore.Append(snap);
+            SnapshotStore.Save(snap);
         }
         catch (OperationCanceledException)
         {
@@ -114,14 +124,22 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            var auth = AuthService.ReadFromDisk();
-            ApplySnapshot(new UsageSnapshot
+            _refreshError = ex.Message;
+            if (_snap is null || _snap.Error is not null)
             {
-                Email = auth?.Email ?? "",
-                DisplayName = auth?.DisplayName ?? "",
-                Error = ex.Message
-            });
-            _tray.SetPercent(0, idle: true, extra: "刷新失败");
+                var auth = AuthService.ReadFromDisk();
+                ApplySnapshot(new UsageSnapshot
+                {
+                    Email = auth?.Email ?? "",
+                    DisplayName = auth?.DisplayName ?? "",
+                    Error = ex.Message
+                });
+                _tray.SetPercent(0, idle: true, extra: "刷新失败");
+            }
+            else
+            {
+                Raise(nameof(FooterText), nameof(ErrorText), nameof(ErrorVisibility));
+            }
         }
         finally
         {
@@ -136,7 +154,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _snap = snap;
         Products.Clear();
         foreach (var p in snap.Products) Products.Add(p);
-        History = HistoryStore.LoadPercents(TimeSpan.FromDays(7)).ToList();
+        History = HistoryStore.LoadPoints(TimeSpan.FromDays(7)).ToList();
 
         if (snap.Error is null)
         {
@@ -150,6 +168,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(PaceLine), nameof(RunoutLine), nameof(PeriodType), nameof(PeriodRange),
             nameof(PrepaidText), nameof(PoolHint), nameof(EmptyProducts), nameof(History),
             nameof(FooterText), nameof(ErrorText), nameof(ErrorVisibility));
+    }
+
+    private static string FormatFetched(DateTimeOffset at)
+    {
+        var local = at.ToLocalTime();
+        return local.Date == DateTime.Now.Date
+            ? local.ToString("HH:mm:ss")
+            : local.ToString("MM-dd HH:mm");
     }
 
     private string _resetShown = "";
