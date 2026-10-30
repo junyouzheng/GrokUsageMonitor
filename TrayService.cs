@@ -57,14 +57,6 @@ internal sealed class TrayService : IDisposable
         if (_icon.Text != tip) _icon.Text = tip;
     }
 
-    public void Notify(string title, string text)
-    {
-        _icon.BalloonTipTitle = title;
-        _icon.BalloonTipText = text;
-        _icon.BalloonTipIcon = Forms.ToolTipIcon.Info;
-        _icon.ShowBalloonTip(5000);
-    }
-
     public void Dispose()
     {
         _icon.Visible = false;

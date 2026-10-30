@@ -13,7 +13,6 @@ namespace GrokUsageMonitor;
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private readonly DispatcherTimer _usageTimer = new() { Interval = TimeSpan.FromMinutes(1) };
     private readonly MonitorSettings _settings;
     private readonly TrayService _tray;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -22,7 +21,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _exitRequested;
     private bool _fetching;
     private bool _snapping;
-    private const double NotifyStep = 5;
 
     public MainWindow()
     {
@@ -37,17 +35,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         _clockTimer.Tick += (_, _) => RefreshClock();
         _clockTimer.Start();
-        _usageTimer.Tick += async (_, _) => await RefreshAsync(false);
-        _usageTimer.Start();
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         SourceInitialized += (_, _) => HideFromTaskbar();
-        Loaded += async (_, _) =>
-        {
-            SnapToEdge();
-            await RefreshAsync(true);
-        };
+        Loaded += (_, _) => SnapToEdge();
         ContentRendered += (_, _) => SnapToEdge();
     }
 
@@ -105,9 +97,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string ErrorText => _snap?.Error ?? "";
     public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorText) ? Visibility.Collapsed : Visibility.Visible;
 
-    private async Task RefreshAsync(bool force)
+    private async Task RefreshAsync()
     {
-        if (!force && _fetching) return;
         if (!await _gate.WaitAsync(0)) return;
         _fetching = true;
         Raise(nameof(FooterText));
@@ -116,7 +107,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             var snap = await Task.Run(() => BillingClient.FetchAsync(_cts.Token));
             ApplySnapshot(snap);
             HistoryStore.Append(snap);
-            MaybeNotify(snap);
         }
         catch (OperationCanceledException)
         {
@@ -162,37 +152,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(FooterText), nameof(ErrorText), nameof(ErrorVisibility));
     }
 
-    private void MaybeNotify(UsageSnapshot snap)
-    {
-        if (!_settings.NotifyOnThresholds || snap.Error is not null) return;
-
-        var periodKey = snap.PeriodEnd?.ToString("o");
-        if (!string.Equals(periodKey, _settings.LastPeriodEnd, StringComparison.Ordinal))
-        {
-            _settings.LastNotifiedPercent = -1;
-            _settings.LastPeriodEnd = periodKey;
-        }
-
-        var reached = NotifyBucket(snap.UsedPercent);
-        if (reached < NotifyStep || reached <= _settings.LastNotifiedPercent) return;
-
-        _settings.LastNotifiedPercent = reached;
-        AppSettings.Save(_settings);
-        var remain = snap.RemainingPercent;
-        _tray.Notify("Grok 额度提醒",
-            reached >= 100
-                ? "本周额度已用尽。可购买额外额度，或等待周期重置。"
-                : $"已用 {snap.UsedPercent:0.#}%（阈值 {reached:0}%）。剩余 {remain:0.#}%。");
-    }
-
-    // Highest 5% mark the usage has reached: 5, 10, 15, …, 100.
-    private static double NotifyBucket(double usedPercent)
-    {
-        if (usedPercent >= 100) return 100;
-        if (usedPercent < NotifyStep) return 0;
-        return Math.Floor(usedPercent / NotifyStep) * NotifyStep;
-    }
-
     private string _resetShown = "";
     private string _paceShown = "";
     private string _runoutShown = "";
@@ -210,7 +169,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             _tray.SetPercent(_snap.UsedPercent, extra: $"{_snap.Tier} · {UsageSnapshot.FormatRemaining(_snap.RemainingTime)}");
     }
 
-    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync(true);
+    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync();
 
     private void ToggleStartup()
     {
@@ -279,7 +238,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _cts.Cancel();
         _clockTimer.Stop();
-        _usageTimer.Stop();
         _tray.Dispose();
         System.Windows.Application.Current.Shutdown();
     }

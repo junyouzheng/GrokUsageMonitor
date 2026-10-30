@@ -171,7 +171,4 @@ internal sealed class CentValue
 public sealed class MonitorSettings
 {
     public bool StartWithWindows { get; set; }
-    public bool NotifyOnThresholds { get; set; } = true;
-    public double LastNotifiedPercent { get; set; } = -1;
-    public string? LastPeriodEnd { get; set; }
 }
