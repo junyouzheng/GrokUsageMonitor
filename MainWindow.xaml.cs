@@ -2,8 +2,6 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -33,7 +31,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         InitializeComponent();
         DataContext = this;
 
-        _tray = new TrayService(ToggleWindow, RestoreWindow, () => _ = RefreshAsync(force: true), ExitApp);
+        _tray = new TrayService(ToggleWindow, RestoreWindow, ExitApp);
 
         Topmost = false;
         ShowInTaskbar = false;
@@ -102,7 +100,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ? "上次刷新失败"
         : _snap is null
             ? "尚未刷新"
-            : $"更新于 {_snap.FetchedAt:HH:mm:ss}  ·  点刷新或按 F5";
+            : $"更新于 {_snap.FetchedAt:HH:mm:ss}";
     public string ErrorText => _snap?.Error ?? "";
     public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorText) ? Visibility.Collapsed : Visibility.Visible;
 
@@ -266,11 +264,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (_exitRequested) return;
         e.Cancel = true;
         HideToTray();
-    }
-
-    private void OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key == Key.F5) _ = RefreshAsync(true);
     }
 
     private void ExitApp()

@@ -18,14 +18,12 @@ internal sealed class TrayService : IDisposable
     private Icon? _current;
     private readonly Action _toggle;
     private readonly Action _show;
-    private readonly Action _refresh;
     private readonly Action _exit;
 
-    public TrayService(Action toggle, Action show, Action refresh, Action exit)
+    public TrayService(Action toggle, Action show, Action exit)
     {
         _toggle = toggle;
         _show = show;
-        _refresh = refresh;
         _exit = exit;
 
         _icon = new Forms.NotifyIcon
@@ -119,7 +117,6 @@ internal sealed class TrayService : IDisposable
     {
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("显示窗口", null, (_, _) => _show());
-        menu.Items.Add("立即刷新", null, (_, _) => _refresh());
         menu.Items.Add("打开 grok.com 用量", null, (_, _) =>
         {
             try

@@ -14,7 +14,6 @@
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         FontFamily="Segoe UI, Microsoft YaHei UI"
-        KeyDown="OnKeyDown"
         Closing="OnClosing"
         LocationChanged="OnLocationChanged"
         Activated="OnActivated">
@@ -48,8 +47,7 @@
           <TextBlock Text="{Binding FooterText}" Foreground="{StaticResource MutedBrush}" FontSize="12"
                      VerticalAlignment="Center"/>
           <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-            <Button Style="{StaticResource GoldButton}" Content="刷新" Click="OnRefreshClick" Margin="0,0,8,0"
-                    ToolTip="立即刷新额度（F5）"/>
+            <Button Style="{StaticResource GoldButton}" Content="刷新" Click="OnRefreshClick" Margin="0,0,8,0"/>
             <Button x:Name="StartupButton" Style="{StaticResource PrimaryButton}" Content="开机启动" Click="ToggleStartup"/>
           </StackPanel>
         </Grid>
