@@ -68,7 +68,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public string LiveLabel => _fetching ? "刷新中" : "手动";
+    public string LiveLabel => _fetching ? "刷新中" : "";
     public Brush StatusBrush => _snap?.StatusBrush ?? BrushOf("#8B909A");
     public Brush RingBrush => UsedPercent >= 90 ? BrushOf("#E85D5D")
         : UsedPercent >= 75 ? BrushOf("#E8B44C")
