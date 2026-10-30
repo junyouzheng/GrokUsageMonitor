@@ -2,7 +2,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Runtime.InteropServices;
-using DrawingFont = System.Drawing.Font;
 using DrawingBrushes = System.Drawing.Brushes;
 using DrawingColor = System.Drawing.Color;
 using Forms = System.Windows.Forms;
@@ -99,20 +98,25 @@ internal sealed class TrayService : IDisposable
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         g.Clear(DrawingColor.Transparent);
 
-        var box = new RectangleF(0.5f, 0.5f, size - 1f, size - 1f);
-        using var shape = RoundedRect(box, 12f);
-        using (var bg = new SolidBrush(DrawingColor.Black))
-            g.FillPath(bg, shape);
-
         var label = remaining.ToString();
-        var fontSize = label.Length >= 3 ? 22f : label.Length == 2 ? 32f : 40f;
-        using var font = new DrawingFont("Segoe UI", fontSize, System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel);
-        using var format = new StringFormat(StringFormat.GenericTypographic)
+        using var path = new GraphicsPath();
+        using var family = new FontFamily("Segoe UI");
+        using var format = new StringFormat(StringFormat.GenericTypographic);
+        path.AddString(label, family, (int)System.Drawing.FontStyle.Bold, 100f, PointF.Empty, format);
+        var bounds = path.GetBounds();
+        if (bounds.Width > 0 && bounds.Height > 0)
         {
-            Alignment = StringAlignment.Center,
-            LineAlignment = StringAlignment.Center
-        };
-        g.DrawString(label, font, DrawingBrushes.White, new RectangleF(0f, 2f, size, size - 2f), format);
+            var scale = Math.Min(size / bounds.Width, size / bounds.Height);
+            using var matrix = new Matrix();
+            matrix.Translate(-bounds.X, -bounds.Y, MatrixOrder.Append);
+            matrix.Scale(scale, scale, MatrixOrder.Append);
+            matrix.Translate(
+                (size - bounds.Width * scale) / 2f,
+                (size - bounds.Height * scale) / 2f,
+                MatrixOrder.Append);
+            path.Transform(matrix);
+            g.FillPath(DrawingBrushes.White, path);
+        }
 
         var hIcon = bmp.GetHicon();
         var icon = Icon.FromHandle(hIcon);
@@ -120,18 +124,6 @@ internal sealed class TrayService : IDisposable
         icon.Dispose();
         NativeDestroy(hIcon);
         return clone;
-    }
-
-    private static GraphicsPath RoundedRect(RectangleF rect, float radius)
-    {
-        var path = new GraphicsPath();
-        var d = Math.Min(radius * 2f, Math.Min(rect.Width, rect.Height));
-        path.AddArc(rect.Left, rect.Top, d, d, 180, 90);
-        path.AddArc(rect.Right - d, rect.Top, d, d, 270, 90);
-        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
-        path.AddArc(rect.Left, rect.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
     }
 
     [DllImport("user32.dll", EntryPoint = "DestroyIcon")]
