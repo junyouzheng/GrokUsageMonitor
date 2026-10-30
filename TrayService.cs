@@ -1,30 +1,30 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
-using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Windows;
 using DrawingFont = System.Drawing.Font;
 using DrawingBrushes = System.Drawing.Brushes;
 using DrawingColor = System.Drawing.Color;
 using Forms = System.Windows.Forms;
-using Rect = System.Windows.Rect;
 
 namespace GrokUsageMonitor;
 
 internal sealed class TrayService : IDisposable
 {
     private readonly Forms.NotifyIcon _icon;
-    private Icon? _current;
+    private readonly Icon?[] _icons = new Icon?[101];
+    private int _shown = -1;
     private readonly Action _toggle;
-    private readonly Action _show;
     private readonly Action _exit;
+    private readonly Action _toggleStartup;
+    private readonly Func<bool> _startupEnabled;
 
-    public TrayService(Action toggle, Action show, Action exit)
+    public TrayService(Action toggle, Action exit, Action toggleStartup, Func<bool> startupEnabled)
     {
         _toggle = toggle;
-        _show = show;
         _exit = exit;
+        _toggleStartup = toggleStartup;
+        _startupEnabled = startupEnabled;
 
         _icon = new Forms.NotifyIcon
         {
@@ -41,17 +41,13 @@ internal sealed class TrayService : IDisposable
 
     public void SetPercent(double used, bool idle = false, string? extra = null)
     {
-        var remaining = Math.Max(0, 100 - used);
-        var color = idle
-            ? DrawingColor.FromArgb(0x8B, 0x90, 0x9A)
-            : used >= 90 ? DrawingColor.FromArgb(0xE8, 0x5D, 0x5D)
-            : used >= 75 ? DrawingColor.FromArgb(0xE8, 0xB4, 0x4C)
-            : DrawingColor.FromArgb(0x7D, 0xDA, 0xA0);
-
-        var next = MakeIcon(used, color);
-        _icon.Icon = next;
-        _current?.Dispose();
-        _current = next;
+        var remaining = Math.Clamp(100 - used, 0, 100);
+        var bucket = (int)Math.Round(remaining);
+        if (_shown != bucket)
+        {
+            _shown = bucket;
+            _icon.Icon = _icons[bucket] ??= MakeIcon(bucket);
+        }
 
         var tip = idle
             ? "Grok 用量监控"
@@ -59,43 +55,7 @@ internal sealed class TrayService : IDisposable
         if (!string.IsNullOrWhiteSpace(extra))
             tip += "\n" + extra;
         if (tip.Length > 63) tip = tip[..63];
-        _icon.Text = tip;
-    }
-
-    public Rect? TryGetIconRect()
-    {
-        try
-        {
-            var id = ReadField<int>(_icon, "id");
-            var native = ReadField<object>(_icon, "window") ?? ReadField<object>(_icon, "_window");
-            if (native is null) return null;
-            var hwnd = native is Forms.NativeWindow nw
-                ? nw.Handle
-                : (IntPtr?)native.GetType().GetProperty("Handle")?.GetValue(native) ?? IntPtr.Zero;
-            if (hwnd == IntPtr.Zero) return null;
-
-            var ident = new NotifyIconIdentifier
-            {
-                CbSize = (uint)Marshal.SizeOf<NotifyIconIdentifier>(),
-                Hwnd = hwnd,
-                Uid = (uint)id
-            };
-            if (Shell_NotifyIconGetRect(ref ident, out var r) != 0) return null;
-            if (r.Right <= r.Left || r.Bottom <= r.Top) return null;
-            return new Rect(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static T? ReadField<T>(object target, string name)
-    {
-        var field = target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-        if (field is null) return default;
-        var value = field.GetValue(target);
-        return value is T t ? t : default;
+        if (_icon.Text != tip) _icon.Text = tip;
     }
 
     public void Notify(string title, string text)
@@ -110,55 +70,49 @@ internal sealed class TrayService : IDisposable
     {
         _icon.Visible = false;
         _icon.Dispose();
-        _current?.Dispose();
+        foreach (var icon in _icons) icon?.Dispose();
     }
 
     private Forms.ContextMenuStrip BuildMenu()
     {
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("显示窗口", null, (_, _) => _show());
-        menu.Items.Add("打开 grok.com 用量", null, (_, _) =>
+        var startup = new Forms.ToolStripMenuItem("开机自启动") { Checked = _startupEnabled() };
+        startup.Click += (_, _) =>
         {
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "https://grok.com/",
-                    UseShellExecute = true
-                });
-            }
-            catch { /* ignore */ }
-        });
+            _toggleStartup();
+            startup.Checked = _startupEnabled();
+        };
+        menu.Opening += (_, _) => startup.Checked = _startupEnabled();
+        menu.Items.Add(startup);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("退出", null, (_, _) => _exit());
         return menu;
     }
 
-    private static Icon MakeIcon(double used, DrawingColor accent)
+    private static Icon MakeIcon(int remaining)
     {
-        const int size = 32;
+        const int size = 64;
         using var bmp = new Bitmap(size, size);
         using var g = Graphics.FromImage(bmp);
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         g.Clear(DrawingColor.Transparent);
 
-        using var track = new Pen(DrawingColor.FromArgb(0x40, 0xFF, 0xFF, 0xFF), 3f);
-        using var fill = new Pen(accent, 3f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        var rect = new RectangleF(3, 3, size - 7, size - 7);
-        g.DrawEllipse(track, rect);
+        var box = new RectangleF(0.5f, 0.5f, size - 1f, size - 1f);
+        using var shape = RoundedRect(box, 12f);
+        using (var bg = new SolidBrush(DrawingColor.Black))
+            g.FillPath(bg, shape);
 
-        var sweep = (float)(Math.Clamp(used, 0, 100) / 100.0 * 360);
-        if (sweep > 0.5f)
-            g.DrawArc(fill, rect, -90, sweep);
-
-        var label = used >= 99.5 ? "!" : ((int)Math.Round(100 - used)).ToString();
-        if (label.Length > 2) label = "99";
-        using var font = new DrawingFont("Segoe UI", label.Length == 1 ? 9.5f : 7.5f, System.Drawing.FontStyle.Bold);
-        var sizeF = g.MeasureString(label, font);
-        g.DrawString(label, font, DrawingBrushes.White,
-            (size - sizeF.Width) / 2,
-            (size - sizeF.Height) / 2 + 0.5f);
+        var label = remaining.ToString();
+        var fontSize = label.Length >= 3 ? 22f : label.Length == 2 ? 32f : 40f;
+        using var font = new DrawingFont("Segoe UI", fontSize, System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel);
+        using var format = new StringFormat(StringFormat.GenericTypographic)
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center
+        };
+        g.DrawString(label, font, DrawingBrushes.White, new RectangleF(0f, 2f, size, size - 2f), format);
 
         var hIcon = bmp.GetHicon();
         var icon = Icon.FromHandle(hIcon);
@@ -168,27 +122,18 @@ internal sealed class TrayService : IDisposable
         return clone;
     }
 
+    private static GraphicsPath RoundedRect(RectangleF rect, float radius)
+    {
+        var path = new GraphicsPath();
+        var d = Math.Min(radius * 2f, Math.Min(rect.Width, rect.Height));
+        path.AddArc(rect.Left, rect.Top, d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Top, d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+        path.AddArc(rect.Left, rect.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
     [DllImport("user32.dll", EntryPoint = "DestroyIcon")]
     private static extern bool NativeDestroy(IntPtr handle);
-
-    [DllImport("shell32.dll", SetLastError = true)]
-    private static extern int Shell_NotifyIconGetRect(ref NotifyIconIdentifier identifier, out NativeRect iconLocation);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NotifyIconIdentifier
-    {
-        public uint CbSize;
-        public IntPtr Hwnd;
-        public uint Uid;
-        public Guid GuidItem;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativeRect
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
 }

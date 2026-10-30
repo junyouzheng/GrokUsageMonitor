@@ -64,16 +64,10 @@ public sealed class UsageSnapshot
         }
     }
 
-    public Brush StatusBrush
-    {
-        get
-        {
-            if (Error is not null) return BrushOf("#E85D5D");
-            if (UsedPercent >= 90) return BrushOf("#E85D5D");
-            if (UsedPercent >= 75) return BrushOf("#E8B44C");
-            return BrushOf("#7DDAA0");
-        }
-    }
+    public Brush StatusBrush =>
+        Error is not null || UsedPercent >= 90 ? Palette.Red
+        : UsedPercent >= 75 ? Palette.Amber
+        : Palette.Green;
 
     public string ToDisplayText()
     {
@@ -104,13 +98,22 @@ public sealed class UsageSnapshot
         if (t.TotalHours >= 1) return $"{(int)t.TotalHours} 小时 {t.Minutes} 分";
         return $"{t.Minutes} 分 {t.Seconds} 秒";
     }
+}
 
-    private static SolidColorBrush BrushOf(string hex)
+internal static class Palette
+{
+    public static readonly SolidColorBrush Muted = Solid("#8B909A");
+    public static readonly SolidColorBrush Red = Solid("#E85D5D");
+    public static readonly SolidColorBrush Amber = Solid("#E8B44C");
+    public static readonly SolidColorBrush Green = Solid("#7DDAA0");
+    public static readonly SolidColorBrush Gold = Solid("#E2B66A");
+    public static readonly SolidColorBrush Track = Solid("#2A2E36");
+
+    private static SolidColorBrush Solid(string hex)
     {
-        var c = (Color)ColorConverter.ConvertFromString(hex)!;
-        var b = new SolidColorBrush(c);
-        b.Freeze();
-        return b;
+        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)!);
+        brush.Freeze();
+        return brush;
     }
 }
 
@@ -167,8 +170,6 @@ internal sealed class CentValue
 
 public sealed class MonitorSettings
 {
-    public bool AlwaysOnTop { get; set; }
-    public bool CompactMode { get; set; }
     public bool StartWithWindows { get; set; }
     public bool NotifyOnThresholds { get; set; } = true;
     public double LastNotifiedPercent { get; set; } = -1;

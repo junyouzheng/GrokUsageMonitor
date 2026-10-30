@@ -63,35 +63,72 @@ internal static class AppSettings
 internal static class HistoryStore
 {
     private static readonly string PathFile = Path.Combine(AppSettings.DataDir, "history.jsonl");
+    private static readonly TimeSpan Keep = TimeSpan.FromDays(7);
+    private static readonly List<HistoryPoint> Points = [];
+    private static bool _loaded;
 
     public static void Append(UsageSnapshot snap)
     {
         if (snap.Error is not null) return;
+        EnsureLoaded();
+        Points.Add(new HistoryPoint { At = snap.FetchedAt, UsedPercent = snap.UsedPercent });
         Directory.CreateDirectory(AppSettings.DataDir);
-        var line = JsonSerializer.Serialize(new HistoryPoint { At = snap.FetchedAt, UsedPercent = snap.UsedPercent });
-        File.AppendAllText(PathFile, line + Environment.NewLine);
+        File.AppendAllText(PathFile, JsonSerializer.Serialize(Points[^1]) + Environment.NewLine);
     }
 
     public static IReadOnlyList<double> LoadPercents(TimeSpan window)
     {
-        if (!File.Exists(PathFile)) return [];
+        EnsureLoaded();
         var cutoff = DateTimeOffset.Now - window;
-        var points = new List<double>();
+        if (Points.Count > 0 && Points[0].At < cutoff)
+        {
+            var removed = Points.RemoveAll(p => p.At < cutoff);
+            if (removed >= 60) Rewrite();
+        }
+
+        var values = new double[Points.Count];
+        for (var i = 0; i < Points.Count; i++) values[i] = Points[i].UsedPercent;
+        return values;
+    }
+
+    private static void EnsureLoaded()
+    {
+        if (_loaded) return;
+        _loaded = true;
+        if (!File.Exists(PathFile)) return;
+
+        var cutoff = DateTimeOffset.Now - Keep;
+        var dropped = false;
         foreach (var line in File.ReadLines(PathFile))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
             try
             {
-                var p = JsonSerializer.Deserialize<HistoryPoint>(line);
-                if (p is null || p.At < cutoff) continue;
-                points.Add(p.UsedPercent);
+                var point = JsonSerializer.Deserialize<HistoryPoint>(line);
+                if (point is null) continue;
+                if (point.At < cutoff)
+                {
+                    dropped = true;
+                    continue;
+                }
+
+                Points.Add(point);
             }
             catch
             {
-                // skip bad line
+                dropped = true;
             }
         }
 
-        return points;
+        if (dropped) Rewrite();
+    }
+
+    private static void Rewrite()
+    {
+        Directory.CreateDirectory(AppSettings.DataDir);
+        var tmp = PathFile + ".tmp";
+        File.WriteAllLines(tmp, Points.Select(p => JsonSerializer.Serialize(p)));
+        File.Copy(tmp, PathFile, overwrite: true);
+        File.Delete(tmp);
     }
 }

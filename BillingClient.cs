@@ -78,7 +78,9 @@ internal static class BillingClient
         var tier = billing.SubscriptionTier;
         if (string.IsNullOrWhiteSpace(tier))
             tier = await TryReadTierAsync(auth, ct) ?? "SuperGrok";
-        var email = await TryReadEmailAsync(auth, ct) ?? auth.Email;
+        var email = string.IsNullOrWhiteSpace(auth.Email)
+            ? await TryReadEmailAsync(auth, ct) ?? ""
+            : auth.Email;
 
         return new UsageSnapshot
         {

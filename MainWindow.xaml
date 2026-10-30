@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:GrokUsageMonitor"
         Title="Grok 用量监控"
-        Width="420" Height="720"
-        MinWidth="420" MaxWidth="420"
-        MinHeight="720" MaxHeight="720"
+        Width="400" Height="640"
+        MinWidth="400" MaxWidth="400"
+        MinHeight="640" MaxHeight="640"
         Background="{StaticResource BgBrush}"
         Foreground="{StaticResource TextBrush}"
         WindowStartupLocation="Manual"
@@ -23,124 +23,141 @@
 
   <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Background="{StaticResource BgBrush}">
     <DockPanel>
-      <Border DockPanel.Dock="Top" Height="44" Background="{StaticResource BgBrush}">
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0">
-          <Ellipse Width="8" Height="8" Fill="{Binding StatusBrush}" Margin="0,0,8,0"/>
-          <TextBlock Text="GROK 用量" FontSize="12" FontWeight="SemiBold"
-                     Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
-          <TextBlock Text="{Binding LiveLabel}" Margin="10,0,0,0" FontSize="11"
-                     Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Border>
-
-      <Border DockPanel.Dock="Top" Background="#3A1E1E" Padding="12,8"
-              Visibility="{Binding ErrorVisibility}">
-        <TextBlock Text="{Binding ErrorText}" Foreground="#FFB4B4" TextWrapping="Wrap" FontSize="12"/>
-      </Border>
-
-      <Border DockPanel.Dock="Bottom" Padding="14,10" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
-        <Grid>
+      <Border DockPanel.Dock="Top" Height="40" Background="{StaticResource BgBrush}">
+        <Grid VerticalAlignment="Center" Margin="12,0,10,0">
           <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <TextBlock Text="{Binding FooterText}" Foreground="{StaticResource MutedBrush}" FontSize="12"
-                     VerticalAlignment="Center"/>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-            <Button Style="{StaticResource GoldButton}" Content="刷新" Click="OnRefreshClick" Margin="0,0,8,0"/>
-            <Button x:Name="StartupButton" Style="{StaticResource PrimaryButton}" Content="开机启动" Click="ToggleStartup"/>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Grid Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center">
+              <Ellipse Width="12" Height="12" Stroke="{Binding StatusBrush}" StrokeThickness="1.8"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              <Line X1="9" Y1="1.5" X2="15" Y2="7.5"
+                    Stroke="#F3EEE4" StrokeThickness="1.7"
+                    StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+            </Grid>
+            <TextBlock Text="GROK 用量" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+          </StackPanel>
+          <TextBlock Grid.Column="1" Text="{Binding ErrorText}" Visibility="{Binding ErrorVisibility}"
+                     Foreground="#FFB4B4" FontSize="11" VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis" Margin="8,0"/>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{Binding FooterText}" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                       VerticalAlignment="Center"/>
+            <Button Style="{StaticResource GoldButton}" Content="刷新" Click="OnRefreshClick"
+                    Padding="10,3" FontSize="12" Margin="8,0,0,0"/>
           </StackPanel>
         </Grid>
       </Border>
 
-      <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,8,16,12">
-        <StackPanel>
-          <Grid Margin="0,4,0,10">
+      <Grid Margin="14,8,14,10">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <StackPanel Grid.Row="0">
+        <Grid Margin="0,0,0,12">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <StackPanel>
+            <TextBlock Text="{Binding AccountLine}" FontSize="13"/>
+            <TextBlock Text="{Binding Email}" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                       Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+          </StackPanel>
+          <Border Grid.Column="1" Background="#242018" CornerRadius="8" Padding="10,4" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Tier}" Foreground="{StaticResource GoldBrush}" FontSize="11" FontWeight="SemiBold"/>
+          </Border>
+        </Grid>
+
+        <Grid Margin="0,0,0,12">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+          <Grid Width="112" Height="112">
+            <local:RingGauge Value="{Binding UsedPercent}" Thickness="12"
+                             TrackBrush="#2A2E36" FillBrush="{Binding RingBrush}"/>
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+              <TextBlock Text="{Binding RemainingText}" FontSize="22" FontWeight="Light"
+                         HorizontalAlignment="Center"/>
+              <TextBlock Text="剩余" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                         HorizontalAlignment="Center" Margin="0,1,0,0"/>
+            </StackPanel>
+          </Grid>
+          <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
+            <TextBlock Text="{Binding UsedLine}" FontSize="14"/>
+            <local:PercentBar Height="8" Margin="0,8,0,10" Value="{Binding UsedPercent}" Fill="{Binding RingBrush}"/>
+            <TextBlock Text="{Binding ResetLine}" Foreground="{StaticResource MutedBrush}" FontSize="12" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding PaceLine}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding RunoutLine}" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                       Margin="0,6,0,0" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Grid>
+
+        <Border Style="{StaticResource Card}" Padding="12,10" Margin="0,0,0,14">
+          <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <StackPanel>
-              <TextBlock Text="{Binding AccountLine}" FontSize="13"/>
-              <TextBlock Text="{Binding Email}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,2,0,0"/>
+              <TextBlock Text="本周期" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+              <TextBlock Text="{Binding PeriodType}" FontSize="15" Margin="0,3,0,0"/>
+              <TextBlock Text="{Binding PeriodRange}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap"/>
             </StackPanel>
-            <Border Grid.Column="1" Background="#242018" CornerRadius="8" Padding="10,4" VerticalAlignment="Center">
-              <TextBlock Text="{Binding Tier}" Foreground="{StaticResource GoldBrush}" FontSize="11" FontWeight="SemiBold"/>
-            </Border>
-          </Grid>
-
-          <Grid Margin="0,6,0,4">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="Auto"/>
-              <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <Grid Width="168" Height="168">
-              <local:RingGauge Value="{Binding UsedPercent}" Thickness="14"
-                               TrackBrush="#2A2E36" FillBrush="{Binding RingBrush}"/>
-              <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock Text="{Binding RemainingText}" FontSize="36" FontWeight="Light"
-                           HorizontalAlignment="Center"/>
-                <TextBlock Text="剩余" Foreground="{StaticResource MutedBrush}" FontSize="12"
-                           HorizontalAlignment="Center" Margin="0,2,0,0"/>
-              </StackPanel>
-            </Grid>
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="18,0,0,0">
-              <TextBlock Text="{Binding UsedLine}" FontSize="14"/>
-              <local:PercentBar Height="8" Margin="0,8,0,12" Value="{Binding UsedPercent}" Fill="{Binding RingBrush}"/>
-              <TextBlock Text="{Binding ResetLine}" Foreground="{StaticResource MutedBrush}" FontSize="12" TextWrapping="Wrap"/>
-              <TextBlock Text="{Binding PaceLine}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
-              <TextBlock Text="{Binding RunoutLine}" Foreground="{StaticResource MutedBrush}" FontSize="11"
-                         Margin="0,6,0,0" TextWrapping="Wrap"/>
+            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+              <TextBlock Text="额外预付额度" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+              <TextBlock Text="{Binding PrepaidText}" FontSize="15" Margin="0,3,0,0"/>
+              <TextBlock Text="{Binding PoolHint}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap"/>
             </StackPanel>
           </Grid>
+        </Border>
 
-          <StackPanel>
-            <Border Style="{StaticResource Card}" Margin="0,8,0,0">
-              <Grid>
+        <TextBlock Text="产品拆分" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="2,0,0,8"/>
+        <TextBlock Text="{Binding EmptyProducts}" Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="2,0,0,8">
+          <TextBlock.Style>
+            <Style TargetType="TextBlock">
+              <Setter Property="Visibility" Value="Visible"/>
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding EmptyProducts}" Value="">
+                  <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
+        <ItemsControl ItemsSource="{Binding Products}" Margin="0,0,0,12">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid Margin="0,0,0,8" Height="22">
                 <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="88"/>
                   <ColumnDefinition Width="*"/>
-                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="48"/>
                 </Grid.ColumnDefinitions>
-                <StackPanel>
-                  <TextBlock Text="本周期" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
-                  <TextBlock Text="{Binding PeriodType}" FontSize="16" Margin="0,4,0,0"/>
-                  <TextBlock Text="{Binding PeriodRange}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                </StackPanel>
-                <StackPanel Grid.Column="1">
-                  <TextBlock Text="额外预付额度" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
-                  <TextBlock Text="{Binding PrepaidText}" FontSize="16" Margin="0,4,0,0"/>
-                  <TextBlock Text="{Binding PoolHint}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                </StackPanel>
+                <TextBlock Text="{Binding Label}" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <local:PercentBar Grid.Column="1" Height="8" Margin="8,0" Value="{Binding Percent}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="2" Text="{Binding Percent, StringFormat={}{0:0.#}%}"
+                           FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
               </Grid>
-            </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
-            <TextBlock Text="产品拆分" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="2,16,0,8"/>
-            <ItemsControl ItemsSource="{Binding Products}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                  <Grid Margin="0,0,0,10">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="88"/>
-                      <ColumnDefinition Width="*"/>
-                      <ColumnDefinition Width="48"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding Label}" FontSize="12" VerticalAlignment="Center"/>
-                    <local:PercentBar Grid.Column="1" Height="8" Margin="8,0" Value="{Binding Percent}"/>
-                    <TextBlock Grid.Column="2" Text="{Binding Percent, StringFormat={}{0:0.#}%}"
-                               FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                  </Grid>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <TextBlock Text="{Binding EmptyProducts}" Foreground="{StaticResource MutedBrush}" FontSize="12"/>
-
-            <TextBlock Text="近 7 天用量走势" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="2,8,0,8"/>
-            <Border Style="{StaticResource Card}" Padding="10">
-              <local:Sparkline Height="64" Values="{Binding History}" Stroke="{StaticResource GoldBrush}"/>
-            </Border>
-          </StackPanel>
         </StackPanel>
-      </ScrollViewer>
+        <DockPanel Grid.Row="1" Margin="0,4,0,0">
+          <TextBlock DockPanel.Dock="Top" Text="近 7 天用量走势" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="2,0,0,8"/>
+          <Border Style="{StaticResource Card}" Padding="10,8">
+            <local:Sparkline MinHeight="48" VerticalAlignment="Stretch"
+                             Values="{Binding History}" Stroke="{StaticResource GoldBrush}"/>
+          </Border>
+        </DockPanel>
+      </Grid>
     </DockPanel>
   </Border>
 </Window>

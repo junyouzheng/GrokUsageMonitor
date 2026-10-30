@@ -9,38 +9,22 @@ namespace GrokUsageMonitor;
 
 internal static class WindowAnchor
 {
-    public const double Width = 420;
-    public const double Height = 720;
+    public const double Width = 400;
+    public const double Height = 640;
+    private const double EdgeMarginPx = 4;
 
-    public static void SnapAboveTray(Window window, Rect? iconPixels)
+    public static void SnapToWorkAreaEdge(Window window)
     {
         var work = WorkAreaDip(window);
-        var size = FitSize(work);
-        window.MinWidth = window.MaxWidth = window.Width = size.Width;
-        window.MinHeight = window.MaxHeight = window.Height = size.Height;
+        var margin = MarginDip(window);
+        var size = FitSize(work, margin);
+        if (Math.Abs(window.Width - size.Width) > 0.5)
+            window.MinWidth = window.MaxWidth = window.Width = size.Width;
+        if (Math.Abs(window.Height - size.Height) > 0.5)
+            window.MinHeight = window.MaxHeight = window.Height = size.Height;
 
-        var icon = iconPixels is { } px && px.Width > 0
-            ? PixelRectToDip(window, px)
-            : new Rect(work.Right - 24, work.Bottom, 24, 1);
-
-        var left = icon.X + icon.Width / 2 - size.Width / 2;
-        var top = icon.Y - size.Height - 6;
-
-        if (icon.Y + icon.Height / 2 < work.Top + work.Height * 0.25)
-            top = icon.Y + icon.Height + 6;
-        else if (icon.X + icon.Width / 2 < work.Left + 40)
-        {
-            left = icon.X + icon.Width + 6;
-            top = icon.Y + icon.Height / 2 - size.Height / 2;
-        }
-        else if (icon.X > work.Right - 40)
-        {
-            left = icon.X - size.Width - 6;
-            top = icon.Y + icon.Height / 2 - size.Height / 2;
-        }
-
-        left = Math.Clamp(left, work.Left, Math.Max(work.Left, work.Right - size.Width));
-        top = Math.Clamp(top, work.Top, Math.Max(work.Top, work.Bottom - size.Height));
+        var left = Math.Max(work.Left, work.Right - size.Width - margin.Width);
+        var top = Math.Max(work.Top, work.Bottom - size.Height - margin.Height);
 
         if (Math.Abs(window.Left - left) > 1 || Math.Abs(window.Top - top) > 1)
         {
@@ -49,9 +33,20 @@ internal static class WindowAnchor
         }
     }
 
-    private static Size FitSize(Rect work) =>
-        new(Math.Min(Width, Math.Max(320, work.Width)),
-            Math.Min(Height, Math.Max(360, work.Height)));
+    private static Size FitSize(Rect work, Size margin)
+    {
+        var availW = Math.Max(1, work.Width - margin.Width * 2);
+        var availH = Math.Max(1, work.Height - margin.Height * 2);
+        return new Size(Math.Min(Width, availW), Math.Min(Height, availH));
+    }
+
+    private static Size MarginDip(Window window)
+    {
+        var dpi = VisualTreeHelper.GetDpi(window);
+        var sx = dpi.DpiScaleX <= 0 ? 1 : dpi.DpiScaleX;
+        var sy = dpi.DpiScaleY <= 0 ? 1 : dpi.DpiScaleY;
+        return new Size(EdgeMarginPx / sx, EdgeMarginPx / sy);
+    }
 
     private static Rect WorkAreaDip(Window window)
     {
@@ -63,13 +58,6 @@ internal static class WindowAnchor
         var topLeft = PixelToDip(window, wa.Left, wa.Top);
         var bottomRight = PixelToDip(window, wa.Right, wa.Bottom);
         return new Rect(topLeft, bottomRight);
-    }
-
-    private static Rect PixelRectToDip(Window window, Rect px)
-    {
-        var a = PixelToDip(window, px.X, px.Y);
-        var b = PixelToDip(window, px.X + px.Width, px.Y + px.Height);
-        return new Rect(a, b);
     }
 
     private static Point PixelToDip(Window window, double x, double y)

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using Brush = System.Windows.Media.Brush;
@@ -121,12 +120,11 @@ public sealed class Sparkline : FrameworkElement
         var h = ActualHeight;
         if (w < 4 || h < 4) return;
 
-        var muted = new SolidColorBrush(Color.FromRgb(0x2A, 0x2E, 0x36));
-        muted.Freeze();
-        dc.DrawLine(new Pen(muted, 1), new Point(0, h - 0.5), new Point(w, h - 0.5));
+        dc.DrawLine(TrackPen, new Point(0, h - 0.5), new Point(w, h - 0.5));
 
         var values = Values;
         if (values is null || values.Count < 2) return;
+        values = Sample(values, 360);
 
         var max = Math.Max(1, values.Max());
         var min = Math.Min(0, values.Min());
@@ -166,6 +164,32 @@ public sealed class Sparkline : FrameworkElement
         dc.DrawGeometry(fill, null, fillGeo);
         dc.DrawGeometry(null, new Pen(Stroke, 1.6) { LineJoin = PenLineJoin.Round }, geo);
     }
+
+    private static readonly Pen TrackPen = CreateTrackPen();
+
+    private static Pen CreateTrackPen()
+    {
+        var pen = new Pen(Palette.Track, 1);
+        pen.Freeze();
+        return pen;
+    }
+
+    private static IList<double> Sample(IList<double> values, int max)
+    {
+        if (values.Count <= max) return values;
+        var sampled = new double[max];
+        var count = values.Count;
+        for (var i = 0; i < max; i++)
+        {
+            var start = i * count / max;
+            var end = Math.Min(count, Math.Max(start + 1, (i + 1) * count / max));
+            var acc = 0d;
+            for (var j = start; j < end; j++) acc += values[j];
+            sampled[i] = acc / (end - start);
+        }
+
+        return sampled;
+    }
 }
 
 public sealed class PercentBar : FrameworkElement
@@ -196,17 +220,10 @@ public sealed class PercentBar : FrameworkElement
         var w = ActualWidth;
         var h = ActualHeight;
         if (w <= 0 || h <= 0) return;
-        var track = new SolidColorBrush(Color.FromRgb(0x2A, 0x2E, 0x36));
-        track.Freeze();
-        dc.DrawRoundedRectangle(track, null, new Rect(0, 0, w, h), h / 2, h / 2);
+        dc.DrawRoundedRectangle(Palette.Track, null, new Rect(0, 0, w, h), h / 2, h / 2);
         var pct = Math.Clamp(Value, 0, 100) / 100.0;
         var fw = Math.Max(h, w * pct);
         if (pct > 0)
             dc.DrawRoundedRectangle(Fill, null, new Rect(0, 0, fw, h), h / 2, h / 2);
     }
-}
-
-internal static class TextFmt
-{
-    public static string Pct(double v) => v.ToString("0.#", CultureInfo.CurrentCulture) + "%";
 }

@@ -7,14 +7,13 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using Brush = System.Windows.Media.Brush;
-using Color = System.Windows.Media.Color;
-using ColorConverter = System.Windows.Media.ColorConverter;
 
 namespace GrokUsageMonitor;
 
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer _usageTimer = new() { Interval = TimeSpan.FromMinutes(1) };
     private readonly MonitorSettings _settings;
     private readonly TrayService _tray;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -23,7 +22,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _exitRequested;
     private bool _fetching;
     private bool _snapping;
-    private static readonly double[] NotifyMarks = [50, 80, 90, 100];
+    private const double NotifyStep = 5;
 
     public MainWindow()
     {
@@ -31,24 +30,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         InitializeComponent();
         DataContext = this;
 
-        _tray = new TrayService(ToggleWindow, RestoreWindow, ExitApp);
+        _tray = new TrayService(ToggleWindow, ExitApp, ToggleStartup, () => _settings.StartWithWindows);
 
         Topmost = false;
         ShowInTaskbar = false;
 
         _clockTimer.Tick += (_, _) => RefreshClock();
         _clockTimer.Start();
+        _usageTimer.Tick += async (_, _) => await RefreshAsync(false);
+        _usageTimer.Start();
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         SourceInitialized += (_, _) => HideFromTaskbar();
         Loaded += async (_, _) =>
         {
-            ApplyStartupCaption();
-            SnapToIcon();
+            SnapToEdge();
             await RefreshAsync(true);
         };
-        ContentRendered += (_, _) => SnapToIcon();
+        ContentRendered += (_, _) => SnapToEdge();
     }
 
     private void HideFromTaskbar()
@@ -68,11 +68,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public string LiveLabel => _fetching ? "刷新中" : "";
-    public Brush StatusBrush => _snap?.StatusBrush ?? BrushOf("#8B909A");
-    public Brush RingBrush => UsedPercent >= 90 ? BrushOf("#E85D5D")
-        : UsedPercent >= 75 ? BrushOf("#E8B44C")
-        : BrushOf("#E2B66A");
+    public Brush StatusBrush => _snap?.StatusBrush ?? Palette.Muted;
+    public Brush RingBrush => UsedPercent >= 90 ? Palette.Red
+        : UsedPercent >= 75 ? Palette.Amber
+        : Palette.Gold;
 
     public string AccountLine => string.IsNullOrWhiteSpace(_snap?.DisplayName) ? "Grok 账号" : _snap!.DisplayName;
     public string Email => _snap?.Email ?? "读取 ~/.grok/auth.json";
@@ -96,22 +95,22 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<ProductShare> Products { get; } = new();
     public string EmptyProducts => Products.Count == 0 ? "暂无产品拆分" : "";
     public IList<double> History { get; private set; } = Array.Empty<double>();
-    public string FooterText => _snap?.Error is not null
-        ? "上次刷新失败"
-        : _snap is null
-            ? "尚未刷新"
-            : $"更新于 {_snap.FetchedAt:HH:mm:ss}";
+    public string FooterText => _fetching
+        ? "刷新中"
+        : _snap?.Error is not null
+            ? "刷新失败"
+            : _snap is null
+                ? "尚未刷新"
+                : $"更新于 {_snap.FetchedAt:HH:mm:ss}";
     public string ErrorText => _snap?.Error ?? "";
     public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorText) ? Visibility.Collapsed : Visibility.Visible;
-
-    public string? Error => _snap?.Error;
 
     private async Task RefreshAsync(bool force)
     {
         if (!force && _fetching) return;
         if (!await _gate.WaitAsync(0)) return;
         _fetching = true;
-        Raise(nameof(LiveLabel));
+        Raise(nameof(FooterText));
         try
         {
             var snap = await Task.Run(() => BillingClient.FetchAsync(_cts.Token));
@@ -125,10 +124,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            var auth = AuthService.ReadFromDisk();
             ApplySnapshot(new UsageSnapshot
             {
-                Email = AuthService.ReadFromDisk()?.Email ?? "",
-                DisplayName = AuthService.ReadFromDisk()?.DisplayName ?? "",
+                Email = auth?.Email ?? "",
+                DisplayName = auth?.DisplayName ?? "",
                 Error = ex.Message
             });
             _tray.SetPercent(0, idle: true, extra: "刷新失败");
@@ -137,7 +137,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             _fetching = false;
             _gate.Release();
-            Raise(nameof(LiveLabel), nameof(FooterText));
+            Raise(nameof(FooterText));
         }
     }
 
@@ -173,42 +173,49 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             _settings.LastPeriodEnd = periodKey;
         }
 
-        foreach (var mark in NotifyMarks)
-        {
-            if (snap.UsedPercent >= mark && _settings.LastNotifiedPercent < mark)
-            {
-                _settings.LastNotifiedPercent = mark;
-                AppSettings.Save(_settings);
-                var remain = snap.RemainingPercent;
-                _tray.Notify("Grok 额度提醒",
-                    mark >= 100
-                        ? "本周额度已用尽。可购买额外额度，或等待周期重置。"
-                        : $"已用 {snap.UsedPercent:0.#}%（阈值 {mark:0}%）。剩余 {remain:0.#}%。");
-                break;
-            }
-        }
+        var reached = NotifyBucket(snap.UsedPercent);
+        if (reached < NotifyStep || reached <= _settings.LastNotifiedPercent) return;
+
+        _settings.LastNotifiedPercent = reached;
+        AppSettings.Save(_settings);
+        var remain = snap.RemainingPercent;
+        _tray.Notify("Grok 额度提醒",
+            reached >= 100
+                ? "本周额度已用尽。可购买额外额度，或等待周期重置。"
+                : $"已用 {snap.UsedPercent:0.#}%（阈值 {reached:0}%）。剩余 {remain:0.#}%。");
     }
+
+    // Highest 5% mark the usage has reached: 5, 10, 15, …, 100.
+    private static double NotifyBucket(double usedPercent)
+    {
+        if (usedPercent >= 100) return 100;
+        if (usedPercent < NotifyStep) return 0;
+        return Math.Floor(usedPercent / NotifyStep) * NotifyStep;
+    }
+
+    private string _resetShown = "";
+    private string _paceShown = "";
+    private string _runoutShown = "";
 
     private void RefreshClock()
     {
         if (_snap is null) return;
-        Raise(nameof(ResetLine), nameof(PaceLine), nameof(RunoutLine), nameof(FooterText));
+        var reset = ResetLine;
+        var pace = PaceLine;
+        var runout = RunoutLine ?? "";
+        if (reset != _resetShown) { _resetShown = reset; Raise(nameof(ResetLine)); }
+        if (pace != _paceShown) { _paceShown = pace; Raise(nameof(PaceLine)); }
+        if (runout != _runoutShown) { _runoutShown = runout; Raise(nameof(RunoutLine)); }
         if (_snap.Error is null)
             _tray.SetPercent(_snap.UsedPercent, extra: $"{_snap.Tier} · {UsageSnapshot.FormatRemaining(_snap.RemainingTime)}");
     }
 
     private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync(true);
 
-    private void ToggleStartup(object sender, RoutedEventArgs e)
+    private void ToggleStartup()
     {
         _settings.StartWithWindows = !_settings.StartWithWindows;
         AppSettings.Save(_settings);
-        ApplyStartupCaption();
-    }
-
-    private void ApplyStartupCaption()
-    {
-        StartupButton.Content = _settings.StartWithWindows ? "已开机启动" : "开机启动";
     }
 
     private void ToggleWindow()
@@ -227,7 +234,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ShowInTaskbar = false;
         Show();
         WindowState = WindowState.Normal;
-        SnapToIcon();
+        SnapToEdge();
         Activate();
     }
 
@@ -237,27 +244,27 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Hide();
     }
 
-    private void SnapToIcon()
+    private void SnapToEdge()
     {
         if (_snapping || !IsVisible) return;
         _snapping = true;
-        try { WindowAnchor.SnapAboveTray(this, _tray.TryGetIconRect()); }
+        try { WindowAnchor.SnapToWorkAreaEdge(this); }
         finally { _snapping = false; }
     }
 
     private void OnActivated(object sender, EventArgs e)
     {
-        if (IsVisible) SnapToIcon();
+        if (IsVisible) SnapToEdge();
     }
 
     private void OnLocationChanged(object sender, EventArgs e)
     {
         if (!_snapping && IsVisible)
-            SnapToIcon();
+            SnapToEdge();
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>
-        Dispatcher.BeginInvoke(SnapToIcon);
+        Dispatcher.BeginInvoke(SnapToEdge);
 
     private void OnClosing(object sender, CancelEventArgs e)
     {
@@ -272,6 +279,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _cts.Cancel();
         _clockTimer.Stop();
+        _usageTimer.Stop();
         _tray.Dispose();
         System.Windows.Application.Current.Shutdown();
     }
@@ -280,12 +288,5 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         foreach (var n in names)
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
-    }
-
-    private static SolidColorBrush BrushOf(string hex)
-    {
-        var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)!);
-        b.Freeze();
-        return b;
     }
 }
