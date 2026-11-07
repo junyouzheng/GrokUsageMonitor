@@ -13,6 +13,7 @@ namespace GrokUsageMonitor;
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer _usageTimer = new() { Interval = TimeSpan.FromMinutes(30) };
     private readonly MonitorSettings _settings;
     private readonly TrayService _tray;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -22,6 +23,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _fetching;
     private bool _snapping;
     private string? _refreshError;
+    private const double StatusStep = 10;
+    private double _statusBucket = -1;
+    private string? _statusPeriod;
+    private bool _statusReady;
 
     public MainWindow()
     {
@@ -43,6 +48,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         _clockTimer.Tick += (_, _) => RefreshClock();
         _clockTimer.Start();
+        _usageTimer.Tick += async (_, _) => await RefreshAsync(manual: false);
+        _usageTimer.Start();
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
@@ -105,18 +112,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string ErrorText => _refreshError ?? _snap?.Error ?? "";
     public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorText) ? Visibility.Collapsed : Visibility.Visible;
 
-    private async Task RefreshAsync()
+    private async Task RefreshAsync(bool manual)
     {
         if (!await _gate.WaitAsync(0)) return;
-        _fetching = true;
-        Raise(nameof(FooterText));
+        if (manual)
+        {
+            _fetching = true;
+            Raise(nameof(FooterText));
+        }
         try
         {
             var snap = await Task.Run(() => BillingClient.FetchAsync(_cts.Token));
-            _refreshError = null;
-            ApplySnapshot(snap);
-            HistoryStore.Append(snap);
-            SnapshotStore.Save(snap);
+            if (manual || ShouldUpdateStatus(snap))
+            {
+                _refreshError = null;
+                ApplySnapshot(snap);
+                HistoryStore.Append(snap);
+                SnapshotStore.Save(snap);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -124,6 +137,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            if (!manual) return;
             _refreshError = ex.Message;
             if (_snap is null || _snap.Error is not null)
             {
@@ -143,10 +157,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
         finally
         {
-            _fetching = false;
+            if (manual) _fetching = false;
             _gate.Release();
-            Raise(nameof(FooterText));
+            if (manual) Raise(nameof(FooterText));
         }
+    }
+
+    // Status bar moves once per 10% of used quota: 10, 20, 30 … 100.
+    // A check that skips several marks updates only the highest one.
+    private bool ShouldUpdateStatus(UsageSnapshot snap)
+    {
+        if (snap.Error is not null) return false;
+        var period = snap.PeriodEnd?.ToString("o");
+        var bucket = StatusBucket(snap.UsedPercent);
+        if (!_statusReady) return bucket >= StatusStep;
+        if (!string.Equals(period, _statusPeriod, StringComparison.Ordinal)) return true;
+        return bucket >= StatusStep && bucket > _statusBucket;
+    }
+
+    private void RememberStatus(UsageSnapshot snap)
+    {
+        _statusReady = true;
+        _statusPeriod = snap.PeriodEnd?.ToString("o");
+        _statusBucket = StatusBucket(snap.UsedPercent);
+    }
+
+    private static double StatusBucket(double usedPercent)
+    {
+        if (usedPercent >= 100) return 100;
+        if (usedPercent < StatusStep) return 0;
+        return Math.Floor(usedPercent / StatusStep) * StatusStep;
     }
 
     private void ApplySnapshot(UsageSnapshot snap)
@@ -160,6 +200,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             var remain = UsageSnapshot.FormatRemaining(snap.RemainingTime);
             _tray.SetPercent(snap.UsedPercent, extra: $"{snap.Tier} · {remain}");
+            RememberStatus(snap);
         }
 
         Raise(
@@ -195,7 +236,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             _tray.SetPercent(_snap.UsedPercent, extra: $"{_snap.Tier} · {UsageSnapshot.FormatRemaining(_snap.RemainingTime)}");
     }
 
-    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync();
+    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync(manual: true);
 
     private void ToggleStartup()
     {
@@ -264,6 +305,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _cts.Cancel();
         _clockTimer.Stop();
+        _usageTimer.Stop();
         _tray.Dispose();
         System.Windows.Application.Current.Shutdown();
     }
