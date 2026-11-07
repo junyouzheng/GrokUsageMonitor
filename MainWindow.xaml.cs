@@ -23,7 +23,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _fetching;
     private bool _snapping;
     private string? _refreshError;
-    private const double StatusStep = 10;
+    private const double StatusStep = 5;
     private double _statusBucket = -1;
     private string? _statusPeriod;
     private bool _statusReady;
@@ -163,7 +163,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
-    // Status bar moves once per 10% of used quota: 10, 20, 30 … 100.
+    // Status bar moves once per 5% of used quota: 5, 10, 15 … 100.
     // A check that skips several marks updates only the highest one.
     private bool ShouldUpdateStatus(UsageSnapshot snap)
     {
