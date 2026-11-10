@@ -22,6 +22,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _exitRequested;
     private bool _fetching;
     private bool _snapping;
+    private bool _ignoreTrayToggle;
     private string? _refreshError;
     private const double StatusStep = 5;
     private double _statusBucket = -1;
@@ -250,7 +251,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             if (IsVisible)
                 HideToTray();
-            else
+            else if (!_ignoreTrayToggle)
                 RestoreWindow();
         });
     }
@@ -281,6 +282,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void OnActivated(object sender, EventArgs e)
     {
         if (IsVisible) SnapToEdge();
+    }
+
+    private void OnDeactivated(object sender, EventArgs e)
+    {
+        if (!IsVisible || _exitRequested) return;
+        HideToTray();
+        // Tray left-click deactivates the window first, then fires MouseClick.
+        // Ignore that same click so the window stays hidden instead of toggling back open.
+        _ignoreTrayToggle = true;
+        Dispatcher.BeginInvoke(() => _ignoreTrayToggle = false, DispatcherPriority.ApplicationIdle);
     }
 
     private void OnLocationChanged(object sender, EventArgs e)

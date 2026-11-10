@@ -16,7 +16,8 @@
         FontFamily="Segoe UI, Microsoft YaHei UI"
         Closing="OnClosing"
         LocationChanged="OnLocationChanged"
-        Activated="OnActivated">
+        Activated="OnActivated"
+        Deactivated="OnDeactivated">
   <WindowChrome.WindowChrome>
     <WindowChrome CaptionHeight="0" GlassFrameThickness="0" ResizeBorderThickness="0" CornerRadius="0"/>
   </WindowChrome.WindowChrome>
