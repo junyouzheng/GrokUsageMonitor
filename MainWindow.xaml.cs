@@ -24,7 +24,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _snapping;
     private bool _ignoreTrayToggle;
     private string? _refreshError;
-    private const double StatusStep = 5;
+    private const double StatusStep = 10;
     private double _statusBucket = -1;
     private string? _statusPeriod;
     private bool _statusReady;
@@ -169,35 +169,34 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private enum UsageChange { None, First, Step, NewPeriod }
 
-    // Status moves once per 5% of used quota: 5, 10, 15 … 100.
-    // A check that skips several marks updates and notifies only the highest one.
+    // Remaining quota steps down by 10: 90, 80, 70 … 0.
+    // A check that skips several marks updates and notifies only the lowest one reached.
     private UsageChange ClassifyStatus(UsageSnapshot snap)
     {
         if (snap.Error is not null) return UsageChange.None;
         var period = snap.PeriodEnd?.ToString("o");
-        var bucket = StatusBucket(snap.UsedPercent);
+        var bucket = RemainingBucket(snap.RemainingPercent);
         if (!_statusReady)
-            return bucket >= StatusStep ? UsageChange.First : UsageChange.None;
+            return bucket < 100 ? UsageChange.First : UsageChange.None;
         if (!string.Equals(period, _statusPeriod, StringComparison.Ordinal))
             return UsageChange.NewPeriod;
-        return bucket >= StatusStep && bucket > _statusBucket
-            ? UsageChange.Step
-            : UsageChange.None;
+        return bucket < _statusBucket ? UsageChange.Step : UsageChange.None;
     }
 
     private void ShowUsageNotice(UsageSnapshot snap, UsageChange change)
     {
+        var bucket = RemainingBucket(snap.RemainingPercent);
         string title;
         var detail = $"已用 {snap.UsedPercent:0.#}%，剩余 {snap.RemainingPercent:0.#}%";
         if (change == UsageChange.NewPeriod)
             title = "新周期已开始";
-        else if (snap.UsedPercent >= 99.5)
+        else if (bucket <= 0 || snap.UsedPercent >= 99.5)
         {
             title = "额度已用尽";
             detail = "本周期额度已经用完";
         }
         else
-            title = $"用量已跨过 {StatusBucket(snap.UsedPercent):0}%";
+            title = $"剩余已到 {bucket:0}%";
 
         UsageToast.Show(title, detail, RestoreWindow, dockTop: IsVisible);
     }
@@ -206,14 +205,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         _statusReady = true;
         _statusPeriod = snap.PeriodEnd?.ToString("o");
-        _statusBucket = StatusBucket(snap.UsedPercent);
+        _statusBucket = RemainingBucket(snap.RemainingPercent);
     }
 
-    private static double StatusBucket(double usedPercent)
+    // 100 means remaining is still above 90. 90 means remaining has reached 90 but not 80.
+    private static double RemainingBucket(double remainingPercent)
     {
-        if (usedPercent >= 100) return 100;
-        if (usedPercent < StatusStep) return 0;
-        return Math.Floor(usedPercent / StatusStep) * StatusStep;
+        var remaining = Math.Clamp(remainingPercent, 0, 100);
+        if (remaining <= 0) return 0;
+        if (remaining >= 100) return 100;
+        return Math.Ceiling(remaining / StatusStep) * StatusStep;
     }
 
     private void ApplySnapshot(UsageSnapshot snap)
