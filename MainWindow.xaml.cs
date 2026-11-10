@@ -124,12 +124,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         try
         {
             var snap = await Task.Run(() => BillingClient.FetchAsync(_cts.Token));
-            if (manual || ShouldUpdateStatus(snap))
+            var change = ClassifyStatus(snap);
+            if (manual || change != UsageChange.None)
             {
                 _refreshError = null;
                 ApplySnapshot(snap);
                 HistoryStore.Append(snap);
                 SnapshotStore.Save(snap);
+                if (!manual && change != UsageChange.None)
+                    ShowUsageNotice(snap, change);
             }
         }
         catch (OperationCanceledException)
@@ -164,16 +167,39 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
-    // Status bar moves once per 5% of used quota: 5, 10, 15 … 100.
-    // A check that skips several marks updates only the highest one.
-    private bool ShouldUpdateStatus(UsageSnapshot snap)
+    private enum UsageChange { None, First, Step, NewPeriod }
+
+    // Status moves once per 5% of used quota: 5, 10, 15 … 100.
+    // A check that skips several marks updates and notifies only the highest one.
+    private UsageChange ClassifyStatus(UsageSnapshot snap)
     {
-        if (snap.Error is not null) return false;
+        if (snap.Error is not null) return UsageChange.None;
         var period = snap.PeriodEnd?.ToString("o");
         var bucket = StatusBucket(snap.UsedPercent);
-        if (!_statusReady) return bucket >= StatusStep;
-        if (!string.Equals(period, _statusPeriod, StringComparison.Ordinal)) return true;
-        return bucket >= StatusStep && bucket > _statusBucket;
+        if (!_statusReady)
+            return bucket >= StatusStep ? UsageChange.First : UsageChange.None;
+        if (!string.Equals(period, _statusPeriod, StringComparison.Ordinal))
+            return UsageChange.NewPeriod;
+        return bucket >= StatusStep && bucket > _statusBucket
+            ? UsageChange.Step
+            : UsageChange.None;
+    }
+
+    private void ShowUsageNotice(UsageSnapshot snap, UsageChange change)
+    {
+        string title;
+        var detail = $"已用 {snap.UsedPercent:0.#}%，剩余 {snap.RemainingPercent:0.#}%";
+        if (change == UsageChange.NewPeriod)
+            title = "新周期已开始";
+        else if (snap.UsedPercent >= 99.5)
+        {
+            title = "额度已用尽";
+            detail = "本周期额度已经用完";
+        }
+        else
+            title = $"用量已跨过 {StatusBucket(snap.UsedPercent):0}%";
+
+        UsageToast.Show(title, detail, RestoreWindow, dockTop: IsVisible);
     }
 
     private void RememberStatus(UsageSnapshot snap)
@@ -317,6 +343,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _cts.Cancel();
         _clockTimer.Stop();
         _usageTimer.Stop();
+        UsageToast.Hide();
         _tray.Dispose();
         System.Windows.Application.Current.Shutdown();
     }
