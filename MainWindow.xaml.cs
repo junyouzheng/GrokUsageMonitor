@@ -13,7 +13,6 @@ namespace GrokUsageMonitor;
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private readonly DispatcherTimer _usageTimer = new() { Interval = TimeSpan.FromMinutes(30) };
     private readonly MonitorSettings _settings;
     private readonly TrayService _tray;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -24,10 +23,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _snapping;
     private bool _ignoreTrayToggle;
     private string? _refreshError;
-    private const double StatusStep = 10;
-    private double _statusBucket = -1;
-    private string? _statusPeriod;
-    private bool _statusReady;
 
     public MainWindow()
     {
@@ -49,8 +44,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         _clockTimer.Tick += (_, _) => RefreshClock();
         _clockTimer.Start();
-        _usageTimer.Tick += async (_, _) => await RefreshAsync(manual: false);
-        _usageTimer.Start();
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
@@ -113,27 +106,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string ErrorText => _refreshError ?? _snap?.Error ?? "";
     public Visibility ErrorVisibility => string.IsNullOrWhiteSpace(ErrorText) ? Visibility.Collapsed : Visibility.Visible;
 
-    private async Task RefreshAsync(bool manual)
+    private async Task RefreshAsync()
     {
         if (!await _gate.WaitAsync(0)) return;
-        if (manual)
-        {
-            _fetching = true;
-            Raise(nameof(FooterText));
-        }
+        _fetching = true;
+        Raise(nameof(FooterText));
         try
         {
             var snap = await Task.Run(() => BillingClient.FetchAsync(_cts.Token));
-            var change = ClassifyStatus(snap);
-            if (manual || change != UsageChange.None)
-            {
-                _refreshError = null;
-                ApplySnapshot(snap);
-                HistoryStore.Append(snap);
-                SnapshotStore.Save(snap);
-                if (!manual && change != UsageChange.None)
-                    ShowUsageNotice(snap, change);
-            }
+            _refreshError = null;
+            ApplySnapshot(snap);
+            HistoryStore.Append(snap);
+            SnapshotStore.Save(snap);
         }
         catch (OperationCanceledException)
         {
@@ -141,7 +125,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            if (!manual) return;
             _refreshError = ex.Message;
             if (_snap is null || _snap.Error is not null)
             {
@@ -161,60 +144,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
         finally
         {
-            if (manual) _fetching = false;
+            _fetching = false;
             _gate.Release();
-            if (manual) Raise(nameof(FooterText));
+            Raise(nameof(FooterText));
         }
-    }
-
-    private enum UsageChange { None, First, Step, NewPeriod }
-
-    // Remaining quota steps down by 10: 90, 80, 70 … 0.
-    // A check that skips several marks updates and notifies only the lowest one reached.
-    private UsageChange ClassifyStatus(UsageSnapshot snap)
-    {
-        if (snap.Error is not null) return UsageChange.None;
-        var period = snap.PeriodEnd?.ToString("o");
-        var bucket = RemainingBucket(snap.RemainingPercent);
-        if (!_statusReady)
-            return bucket < 100 ? UsageChange.First : UsageChange.None;
-        if (!string.Equals(period, _statusPeriod, StringComparison.Ordinal))
-            return UsageChange.NewPeriod;
-        return bucket < _statusBucket ? UsageChange.Step : UsageChange.None;
-    }
-
-    private void ShowUsageNotice(UsageSnapshot snap, UsageChange change)
-    {
-        var bucket = RemainingBucket(snap.RemainingPercent);
-        string title;
-        var detail = $"已用 {snap.UsedPercent:0.#}%，剩余 {snap.RemainingPercent:0.#}%";
-        if (change == UsageChange.NewPeriod)
-            title = "新周期已开始";
-        else if (bucket <= 0 || snap.UsedPercent >= 99.5)
-        {
-            title = "额度已用尽";
-            detail = "本周期额度已经用完";
-        }
-        else
-            title = $"剩余已到 {bucket:0}%";
-
-        UsageToast.Show(title, detail, RestoreWindow, dockTop: IsVisible);
-    }
-
-    private void RememberStatus(UsageSnapshot snap)
-    {
-        _statusReady = true;
-        _statusPeriod = snap.PeriodEnd?.ToString("o");
-        _statusBucket = RemainingBucket(snap.RemainingPercent);
-    }
-
-    // 100 means remaining is still above 90. 90 means remaining has reached 90 but not 80.
-    private static double RemainingBucket(double remainingPercent)
-    {
-        var remaining = Math.Clamp(remainingPercent, 0, 100);
-        if (remaining <= 0) return 0;
-        if (remaining >= 100) return 100;
-        return Math.Ceiling(remaining / StatusStep) * StatusStep;
     }
 
     private void ApplySnapshot(UsageSnapshot snap)
@@ -228,7 +161,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             var remain = UsageSnapshot.FormatRemaining(snap.RemainingTime);
             _tray.SetPercent(snap.UsedPercent, extra: $"{snap.Tier} · {remain}");
-            RememberStatus(snap);
         }
 
         Raise(
@@ -264,7 +196,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             _tray.SetPercent(_snap.UsedPercent, extra: $"{_snap.Tier} · {UsageSnapshot.FormatRemaining(_snap.RemainingTime)}");
     }
 
-    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync(manual: true);
+    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync();
 
     private void ToggleStartup()
     {
@@ -343,8 +275,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _cts.Cancel();
         _clockTimer.Stop();
-        _usageTimer.Stop();
-        UsageToast.Hide();
         _tray.Dispose();
         System.Windows.Application.Current.Shutdown();
     }
